@@ -1,7 +1,7 @@
 #include <FS.h>
-#include <PubSubClient.h>
+#include <PubSubClient.h>        // https://github.com/knolleary/pubsubclient
 #include <ESP8266WiFi.h>         // https://github.com/esp8266/Arduino
-#include <DNSServer.h>
+#include <DNSServer.h>           // https://github.com/esp8266/Arduino/tree/master/libraries/DNSServer
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager
 #include <ArduinoJson.h>         // https://github.com/bblanchon/ArduinoJson
 
