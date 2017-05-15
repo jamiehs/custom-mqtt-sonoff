@@ -59,6 +59,8 @@ void reconnect() {
     // if (mqttClient.connect("ESP8266Client")) {
     if (mqttClient.connect(mac.c_str(), mqtt_user, mqtt_password)) {
       Serial.println("connected");
+      // Subscribe to our globally defined topic
+      mqttClient.subscribe(topic.c_str());
     } else {
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
@@ -199,11 +201,6 @@ void setup() {
   // MQTT Setup & Callback
   mqttClient.setServer(mqtt_server, atol(mqtt_port));
   mqttClient.setCallback(mqttCallback);
-  mqttClient.connect(mac.c_str(), mqtt_user, mqtt_password);
-
-  // Subscribe to our globally defined topic
-  mqttClient.subscribe(topic.c_str());
-
 
   // Say Hello
   mqttClient.publish(String(topic + "/status").c_str(), String("BOOTED").c_str(), true);
