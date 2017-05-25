@@ -61,6 +61,8 @@ void reconnect() {
       Serial.println("connected");
       // Subscribe to our globally defined topic
       mqttClient.subscribe(topic.c_str());
+      // Say Hello
+      mqttClient.publish(String(topic + "/status").c_str(), String("BOOTED").c_str(), true);
     } else {
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
@@ -201,9 +203,6 @@ void setup() {
   // MQTT Setup & Callback
   mqttClient.setServer(mqtt_server, atol(mqtt_port));
   mqttClient.setCallback(mqttCallback);
-
-  // Say Hello
-  mqttClient.publish(String(topic + "/status").c_str(), String("BOOTED").c_str(), true);
 
   powerOn();
 
