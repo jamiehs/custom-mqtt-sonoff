@@ -46,10 +46,10 @@ We stand on the shoulders of giants when we hack things together using libraries
 ## Topics
 
 **Subscribed to:**  
-`sonoff/[your_slug]`
+`sonoff/your_slug`
 
 **Publishes:**  
-`sonoff/[your_slug]/status`
+`sonoff/your_slug/status`
 
 The payload of both topics should be either `ON` or `OFF`
 
