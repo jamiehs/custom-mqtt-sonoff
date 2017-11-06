@@ -5,31 +5,52 @@
 #include <WiFiManager.h>         // https://github.com/tzapu/WiFiManager
 #include <ArduinoJson.h>         // https://github.com/bblanchon/ArduinoJson
 
+// Pin definitions
 #define RELAY_PIN 12
 #define LED_PIN 13
+#define BUTTON_PIN 0
 
+// Configurable and SPIFFS save-able items
 char device_slug[40];
 char mqtt_server[40];
 char mqtt_port[6] = "1883";
 char mqtt_user[40];
 char mqtt_password[40];
+
+// Tracks if we should be trying to save data
+bool should_save_config = false;
+
+// Get the mac address and default topic fragment
 String mac = WiFi.macAddress();
 String topic = "sonoff";
 
+// Stores the previous state of the LED when blinking during long-press
+byte led_pin_previous = HIGH;
 
-//flag for saving data
-bool shouldSaveConfig = false;
+// Initializes the MQTT reconnect timer.
+unsigned long previous_mqtt_reconnect_millis = 0;
 
-//callback notifying us of the need to save config
-void saveConfigCallback () {
-  Serial.println("Should save config");
-  shouldSaveConfig = true;
-}
+// Button code for determining if it's a toggle press or a reset press
+// This uses a timer to see how long a button has been pressed
+int button_pin_current;             // Current state of the button
+long button_pin_millis_held;        // How long the button was held (milliseconds)
+long button_pin_secs_held;          // How long the button was held (seconds)
+long button_pin_prev_secs_held;     // How long the button was held in the previous check
+byte button_pin_previous = HIGH;
+unsigned long button_pin_firstTime; // how long since the button was first pressed
 
-
+// Initialize WiFi Connectivity, MQTT, WiFi Manager
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+WiFiManager wifiManager;
 
+// Callback notifying us of the need to save config
+void saveConfigCallback () {
+  Serial.println("Should save config");
+  should_save_config = true;
+}
+
+// Handler for the incoming MQTT topics and payloads
 void mqttCallback(char* incomingTopic, byte* payload, unsigned int length) {
   payload[length] = '\0';
   String strTopic = String((char*)incomingTopic);
@@ -50,37 +71,32 @@ void mqttCallback(char* incomingTopic, byte* payload, unsigned int length) {
   }
 }
 
+// Reconnect to MQTT if the connection fails
 void reconnect() {
-  // Loop until we're reconnected
-  while(!mqttClient.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    // If you do not want to use a username and password, change next line to
-    // if (mqttClient.connect("ESP8266Client")) {
-    if (mqttClient.connect(mac.c_str(), mqtt_user, mqtt_password)) {
-      Serial.println("connected");
-      // Subscribe to our globally defined topic
-      mqttClient.subscribe(topic.c_str());
-      // Say Hello
-      mqttClient.publish(String(topic + "/status").c_str(), String("BOOTED").c_str(), true);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
+  Serial.print("Attempting MQTT connection...");
+  // Attempt to connect
+  // If you do not want to use a username and password, change next line to
+  // if (mqttClient.connect("ESP8266Client")) {
+  if (mqttClient.connect(mac.c_str(), mqtt_user, mqtt_password)) {
+    Serial.println("connected");
+    // Subscribe to our globally defined topic
+    mqttClient.subscribe(topic.c_str());
+    // Say Hello
+    mqttClient.publish(String(topic + "/status").c_str(), String("BOOTED").c_str(), true);
+  } else {
+    Serial.print("failed, rc=");
+    Serial.print(mqttClient.state());
+    Serial.println(" try again in 15 seconds");
   }
 }
 
 
-
-
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println();
 
   pinMode(RELAY_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // Enable and turn off!
   pinMode(LED_PIN, OUTPUT);
@@ -139,10 +155,6 @@ void setup() {
   WiFiManagerParameter custom_mqtt_user("user", "MQTT User", mqtt_user, 40);
   WiFiManagerParameter custom_mqtt_password("password", "MQTT Password", mqtt_password, 40);
 
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
 
@@ -175,7 +187,7 @@ void setup() {
   topic = topic + "/" + String(device_slug);
 
   //save the custom parameters to FS
-  if (shouldSaveConfig) {
+  if (should_save_config) {
     Serial.println("saving config");
     DynamicJsonBuffer jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
@@ -199,18 +211,84 @@ void setup() {
   Serial.println("local ip");
   Serial.println(WiFi.localIP());
 
-
   // MQTT Setup & Callback
   mqttClient.setServer(mqtt_server, atol(mqtt_port));
   mqttClient.setCallback(mqttCallback);
 
+  // Power on once connected to WiFi
   powerOn();
-
 }
 
 void loop() {
+  button_pin_current = digitalRead(BUTTON_PIN);
+
+  // Restore LED previous state on release
+  if (button_pin_current == HIGH && button_pin_previous == LOW) {
+    digitalWrite(LED_PIN, led_pin_previous);
+  }
+
+  // If the button state changes to pressed, remember the start time
+  if (button_pin_current == LOW && button_pin_previous == HIGH && (millis() - button_pin_firstTime) > 200) {
+    button_pin_firstTime = millis();
+    led_pin_previous = digitalRead(LED_PIN);
+  }
+
+  button_pin_millis_held = (millis() - button_pin_firstTime);
+  button_pin_secs_held = button_pin_millis_held / 1000;
+
+  // If the button was held down for a significant amount of time
+  if (button_pin_millis_held > 50) {
+
+    // If button is being held, then flash it on and off every second
+    if (button_pin_current == LOW && button_pin_secs_held > button_pin_prev_secs_held) {
+      Serial.println("Tick");
+      // Toggle Light with each tick
+      if (digitalRead(LED_PIN) == HIGH) {
+        digitalWrite(LED_PIN, LOW);
+      } else {
+        digitalWrite(LED_PIN, HIGH);
+      }
+    }
+
+    // Check if the button was released since we last checked
+    if (button_pin_current == HIGH && button_pin_previous == LOW) {
+      if (button_pin_secs_held <= 0) {
+        Serial.println("Toggle");
+        if (digitalRead(RELAY_PIN) == HIGH) {
+          powerOff();
+        } else {
+          powerOn();
+        }
+      }
+      if (button_pin_secs_held >= 10 && button_pin_secs_held < 180) {
+        Serial.println("Attempting to clear flash...");
+        delay(1000);
+
+        Serial.println("clearing SPIFFS...");
+        SPIFFS.format();
+        delay(3000);
+
+        Serial.println("resetting WiFi settings...");
+        wifiManager.resetSettings();
+        delay(3000);
+
+        Serial.println("rebooting...");
+        ESP.reset();
+        delay(5000);
+      }
+    }
+  }
+
+  button_pin_previous = button_pin_current;
+  button_pin_prev_secs_held = button_pin_secs_held;
+
   if (!mqttClient.connected()) {
-    reconnect();
+    unsigned long current_mqtt_reconnect_millis = millis();
+
+    if (current_mqtt_reconnect_millis - previous_mqtt_reconnect_millis >= 15000) {
+      previous_mqtt_reconnect_millis = current_mqtt_reconnect_millis;
+      reconnect();
+    }
   }
   mqttClient.loop();
 }
