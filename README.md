@@ -69,10 +69,10 @@ In addition to the above video, [arendst](https://github.com/arendst) has [a few
 ## Topics
 
 **Subscribed to:**  
-`sonoff/[your slug]`
+`sonoff/your_slug`
 
 **Publishes:**  
-`sonoff/[your slug]/status`
+`sonoff/your_slug/status`
 
 The payload of both topics should be either `ON` or `OFF`
 
@@ -83,3 +83,4 @@ The payload of both topics should be either `ON` or `OFF`
 * [Mosquitto](http://mosquitto.org/) setup via [BRUH Tutorial](https://www.youtube.com/watch?v=AsDHEDbyLfg)
 * [MyMQTT (Android)](https://play.google.com/store/apps/details?id=at.tripwire.mqtt.client&hl=en) Subscribe to `#` in order to see all the MQTT chatter.
 * [Button Press Code](https://playground.arduino.cc/Code/HoldButton) from [playground.arduino.cc](https://playground.arduino.cc)
+* [MyMQTT (Android)](https://play.google.com/store/apps/details?id=at.tripwire.mqtt.client&hl=en) Subscribe to `#` in order to see all the MQTT chatter.
